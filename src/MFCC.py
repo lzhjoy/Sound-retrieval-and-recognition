@@ -131,9 +131,17 @@ def plot_mel_spectrogram(
     plt.show()
 
 
-def process_wav_file(file_path, duration=5):
+def process_wav_file(file_path, duration=5, pre_emphasis=0.97):
     """
     读取并处理单个 .wav 文件，计算 FFT 幅度谱
+    增加预加重处理
+    输入:
+        file_path: WAV 文件路径
+        duration: 要分析的音频时长（秒）
+        pre_emphasis: 预加重系数，通常为0.97左右
+    输出:
+        freq: 频率轴数据
+        magnitude: 幅度谱数据
     """
     try:
         sample_rate, data = wavfile.read(file_path)
@@ -160,8 +168,13 @@ def process_wav_file(file_path, duration=5):
         return None, None
     data = data / np.max(np.abs(data))
 
+    # 预加重处理
+    # y[n] = x[n] - pre_emphasis * x[n-1]
+    # 对第一个样本而言 x[n-1] 不存在，可以默认 x[-1] = 0
+    data_preemph = np.append(data[0], data[1:] - pre_emphasis * data[:-1])
+
     # 填充为 2 的幂长度
-    data_padded = pad_to_power_of_two(data)
+    data_padded = pad_to_power_of_two(data_preemph)
 
     # 进行 FFT
     X = fft_iterative(data_padded)
