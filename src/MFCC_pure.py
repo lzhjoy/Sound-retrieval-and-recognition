@@ -255,7 +255,7 @@ def batch_stft_processing(
 
 if __name__ == "__main__":
     batch_stft_processing(
-        directory_path="./data/raw/train",
+        directory_path="./data/raw/test",
         duration=5,
         window_size=1024,
         hop_size=512,
@@ -266,7 +266,7 @@ if __name__ == "__main__":
         save_plots_stft=True,
         save_plots_mel=True,
         save_plots_mfcc=True,
-        output_dir_stft="./data/pre_processed/stft_pure",
-        output_dir_mel="./data/pre_processed/mel_pure",
-        output_dir_mfcc="./data/pre_processed/mfcc_pure",
+        output_dir_stft="./data/pre_processed/stft_test",
+        output_dir_mel="./data/pre_processed/mel_test",
+        output_dir_mfcc="./data/pre_processed/mfcc_test",
     )
