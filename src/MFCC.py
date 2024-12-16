@@ -3,8 +3,10 @@ import matplotlib.pyplot as plt
 from scipy.io import wavfile
 import os
 import glob
-import librosa  # 新增依赖
-import librosa.display  # 用于后续可视化(可选)
+import librosa  # 用于Mel滤波器和MFCC的计算
+import librosa.display  # 可选，用于更方便的可视化
+from tqdm import tqdm
+
 
 # 动态配置字体
 import matplotlib
@@ -19,8 +21,6 @@ def fft_iterative(x):
     """
     N = len(x)
     X = np.array(x, dtype=np.complex64)
-
-    # 位反转排序
     j = 0
     for i in range(1, N):
         bit = N >> 1
@@ -31,8 +31,6 @@ def fft_iterative(x):
             j += bit
         if i < j:
             X[i], X[j] = X[j], X[i]
-
-    # 蝶形运算
     m = 2
     while m <= N:
         theta = -2j * np.pi / m
@@ -50,16 +48,10 @@ def fft_iterative(x):
 
 
 def next_power_of_two(x):
-    """
-    计算大于等于 x 的最小 2 的幂
-    """
     return 1 << (x - 1).bit_length()
 
 
 def pad_to_power_of_two(x):
-    """
-    将输入序列填充为 2 的幂长度
-    """
     N = len(x)
     N_padded = next_power_of_two(N)
     if N_padded == N:
@@ -69,16 +61,10 @@ def pad_to_power_of_two(x):
 
 
 def hann_window(N):
-    """
-    生成汉宁窗
-    """
     return 0.5 - 0.5 * np.cos(2 * np.pi * np.arange(N) / N)
 
 
 def plot_fft(freq, magnitude, title):
-    """
-    绘制 FFT 频谱图
-    """
     plt.figure(figsize=(12, 6))
     plt.plot(freq, magnitude)
     plt.title(title)
@@ -91,9 +77,6 @@ def plot_fft(freq, magnitude, title):
 def plot_stft(
     time_bins, freq_bins, magnitude_db, title, cmap="plasma", vmin=-100, vmax=0
 ):
-    """
-    绘制 STFT 频谱图（时频图），幅度为 dB 尺度
-    """
     plt.figure(figsize=(12, 6))
     plt.pcolormesh(
         time_bins,
@@ -115,12 +98,7 @@ def plot_stft(
 def plot_mel_spectrogram(
     time_bins, mel_freqs, mel_db, title, cmap="magma", vmin=-100, vmax=0
 ):
-    """
-    绘制 Mel 频谱图（时频图），幅度为 dB 尺度
-    mel_freqs: Mel 滤波器组数目对应的 Mel 频率轴（这里直接使用滤波器组个数作为频率轴刻度）
-    """
     plt.figure(figsize=(12, 6))
-    # mel_db shape: (n_mels, time_frames)
     plt.pcolormesh(
         time_bins, mel_freqs, mel_db, shading="gouraud", cmap=cmap, vmin=vmin, vmax=vmax
     )
@@ -131,29 +109,32 @@ def plot_mel_spectrogram(
     plt.show()
 
 
+def plot_mfcc(time_bins, mfcc, title, cmap="viridis"):
+    """
+    绘制 MFCC 特征图
+    mfcc.shape = (n_mfcc, time_frames)
+    """
+    plt.figure(figsize=(12, 6))
+    plt.pcolormesh(
+        time_bins, np.arange(mfcc.shape[0]), mfcc, shading="gouraud", cmap=cmap
+    )
+    plt.title(title)
+    plt.ylabel("MFCC 通道")
+    plt.xlabel("时间 (秒)")
+    plt.colorbar(label="MFCC系数值")
+    plt.show()
+
+
 def process_wav_file(file_path, duration=5, pre_emphasis=0.97):
-    """
-    读取并处理单个 .wav 文件，计算 FFT 幅度谱
-    增加预加重处理
-    输入:
-        file_path: WAV 文件路径
-        duration: 要分析的音频时长（秒）
-        pre_emphasis: 预加重系数，通常为0.97左右
-    输出:
-        freq: 频率轴数据
-        magnitude: 幅度谱数据
-    """
     try:
         sample_rate, data = wavfile.read(file_path)
     except Exception as e:
         print(f"无法读取文件 {file_path}，错误: {e}")
         return None, None
 
-    # 如果是立体声，选择一个通道
     if len(data.shape) > 1:
         data = data[:, 0]
 
-    # 选择前 duration 秒的数据
     N = int(sample_rate * duration)
     if N > len(data):
         print(
@@ -162,46 +143,32 @@ def process_wav_file(file_path, duration=5, pre_emphasis=0.97):
         N = len(data)
     data = data[:N]
 
-    # 归一化
     if np.max(np.abs(data)) == 0:
         print(f"文件 {file_path} 的数据全为零，跳过处理。")
         return None, None
     data = data / np.max(np.abs(data))
 
-    # 预加重处理
-    # y[n] = x[n] - pre_emphasis * x[n-1]
-    # 对第一个样本而言 x[n-1] 不存在，可以默认 x[-1] = 0
+    # 预加重
     data_preemph = np.append(data[0], data[1:] - pre_emphasis * data[:-1])
 
-    # 填充为 2 的幂长度
     data_padded = pad_to_power_of_two(data_preemph)
 
-    # 进行 FFT
     X = fft_iterative(data_padded)
-
-    # 计算频率轴
     N_padded = len(data_padded)
     freq = np.fft.fftfreq(N_padded, d=1 / sample_rate)
 
-    # 只取正频率部分
     pos_mask = freq >= 0
     freq = freq[pos_mask]
     X = X[pos_mask]
 
-    # 计算幅度谱并归一化
     magnitude = np.abs(X) * 2 / N_padded
 
     return freq, magnitude
 
 
 def stft_custom(x, sample_rate, window_size=1024, hop_size=512):
-    """
-    自定义实现的短时傅里叶变换（STFT）
-    返回线性幅度谱（未转换为 dB）
-    """
     window = hann_window(window_size)
     num_frames = 1 + (len(x) - window_size) // hop_size
-    # stft_matrix 用来存线性幅度谱 (非 dB)
     stft_matrix = np.zeros((window_size // 2 + 1, num_frames), dtype=np.float32)
     time_bins = np.zeros(num_frames)
 
@@ -210,10 +177,8 @@ def stft_custom(x, sample_rate, window_size=1024, hop_size=512):
         end = start + window_size
         frame = x[start:end]
         if len(frame) < window_size:
-            # 数据长度不够，用0填充
             frame = np.pad(frame, (0, window_size - len(frame)), "constant")
         frame_win = frame * window
-        # 填充为 2 的幂长度
         frame_padded = pad_to_power_of_two(frame_win)
         X = fft_iterative(frame_padded)
         X = X[: window_size // 2 + 1]
@@ -230,26 +195,23 @@ def batch_stft_processing(
     duration=5,
     window_size=1024,
     hop_size=512,
-    n_mels=128,  # 新增Mel滤波器数目参数
+    n_mels=128,
     fmin=0,
     fmax=None,
-    save_plots=False,
-    output_dir=None,
+    n_mfcc=13,  # 新增MFCC通道数（通常13）
+    save_plots_stft=False,
+    save_plots_mel=False,
+    save_plots_mfcc=False,
+    output_dir_stft=None,
+    output_dir_mel=None,
+    output_dir_mfcc=None,
 ):
-    """
-    批量处理目录下的所有 .wav 文件，计算 STFT 幅度谱并Mel频谱图
-    """
     wav_files = glob.glob(os.path.join(directory_path, "*.wav"))
     if not wav_files:
         print(f"在目录 {directory_path} 中未找到任何 .wav 文件。")
         return
 
-    if save_plots:
-        if output_dir is None:
-            output_dir = os.path.join(directory_path, "stft_plots")
-        os.makedirs(output_dir, exist_ok=True)
-
-    for file_path in wav_files:
+    for file_path in tqdm(wav_files):
         print(f"处理文件: {file_path}")
         try:
             sample_rate, data = wavfile.read(file_path)
@@ -257,7 +219,6 @@ def batch_stft_processing(
             print(f"无法读取文件 {file_path}，错误: {e}")
             continue
 
-        # 如果是立体声，选择一个通道
         if len(data.shape) > 1:
             data = data[:, 0]
 
@@ -274,19 +235,19 @@ def batch_stft_processing(
             continue
         data = data / np.max(np.abs(data))
 
-        # 计算STFT的线性幅度谱
         time_bins, freq_bins, stft_matrix_lin = stft_custom(
             data, sample_rate, window_size, hop_size
         )
-
-        # 转换为分贝尺度的 STFT
         stft_matrix_db = 20 * np.log10(stft_matrix_lin + 1e-10)
 
-        # 绘制STFT
         file_name = os.path.basename(file_path)
         title = f"STFT 幅度谱 - {file_name}"
 
-        if save_plots:
+        # 绘制STFT
+        if save_plots_stft:
+            if output_dir_stft is None:
+                output_dir_stft = os.path.join(directory_path, "stft_plots")
+                os.makedirs(output_dir_stft, exist_ok=True)
             plt.figure(figsize=(12, 6))
             plt.pcolormesh(
                 time_bins,
@@ -302,40 +263,29 @@ def batch_stft_processing(
             plt.xlabel("时间 (秒)")
             plt.colorbar(label="幅度 (dB)")
             plt.ylim(0, sample_rate / 2)
-            plot_path = os.path.join(output_dir, f"{file_name}_stft.png")
+            plot_path = os.path.join(output_dir_stft, f"{file_name}_stft.png")
             plt.savefig(plot_path)
             plt.close()
-            print(f"已保存图表到: {plot_path}")
+            print(f"已保存STFT图表到: {plot_path}")
         else:
             plot_stft(time_bins, freq_bins, stft_matrix_db, title)
 
-        # ==== 生成Mel滤波器组并计算Mel频谱图 ====
-        # 若fmax为None，则默认为 sample_rate/2
+        # Mel滤波器组计算
         if fmax is None:
             fmax = sample_rate / 2
-
-        # 生成 Mel 滤波器组
         mel_filter = librosa.filters.mel(
             sr=sample_rate, n_fft=window_size, n_mels=n_mels, fmin=fmin, fmax=fmax
         )
-
-        # stft_matrix_lin: shape (freq_bins, time_frames)
-        # mel_filter: shape (n_mels, freq_bins)
-        # 首先确认维度匹配，如果 mel_filter 对应的freq_bins与 stft的freq_bins点数不一致，需要做适配。
-        # 这里n_fft=window_size时，freq_bins大小为 window_size//2+1，与mel_filter期望的一致。
-
-        # 应用Mel滤波器(使用线性幅度谱)
         mel_spectrogram = np.dot(mel_filter, stft_matrix_lin)
-
-        # 转换为dB
         mel_spectrogram_db = 20 * np.log10(mel_spectrogram + 1e-10)
-
-        # 时间轴与STFT相同
-        # mel频率轴只是 n_mels 个mel通道，不对应真实频率，可直接使用 np.arange(n_mels)
         mel_freqs = np.arange(n_mels)
-
         mel_title = f"Mel 频谱图 - {file_name}"
-        if save_plots:
+
+        # 绘制Mel频谱图
+        if save_plots_mel:
+            if output_dir_mel is None:
+                output_dir_mel = os.path.join(directory_path, "mel_plots")
+                os.makedirs(output_dir_mel, exist_ok=True)
             plt.figure(figsize=(12, 6))
             plt.pcolormesh(
                 time_bins,
@@ -350,19 +300,48 @@ def batch_stft_processing(
             plt.ylabel("Mel 通道")
             plt.xlabel("时间 (秒)")
             plt.colorbar(label="幅度 (dB)")
-            plot_path = os.path.join(output_dir, f"{file_name}_mel.png")
+            plot_path = os.path.join(output_dir_mel, f"{file_name}_mel.png")
             plt.savefig(plot_path)
             plt.close()
             print(f"已保存Mel图表到: {plot_path}")
         else:
             plot_mel_spectrogram(time_bins, mel_freqs, mel_spectrogram_db, mel_title)
 
+        # ==== 计算并绘制MFCC特征图 ====
+        # MFCC通常从Mel功率谱获取。mel_spectrogram_db是dB值，我们需要转换回功率谱。
+        # librosa的mfcc函数期望输入S为功率谱（非dB），因此需使用db_to_power将dB值转换为功率谱。
+        mel_power = librosa.db_to_power(mel_spectrogram_db)
+        mfcc = librosa.feature.mfcc(S=mel_power, sr=sample_rate, n_mfcc=n_mfcc)
+        mfcc_title = f"MFCC 特征图 - {file_name}"
+
+        # 绘制MFCC特征图
+        if save_plots_mfcc:
+            if output_dir_mfcc is None:
+                output_dir_mfcc = os.path.join(directory_path, "mfcc_plots")
+                os.makedirs(output_dir_mfcc, exist_ok=True)
+            plt.figure(figsize=(12, 6))
+            plt.pcolormesh(
+                time_bins, np.arange(n_mfcc), mfcc, shading="gouraud", cmap="viridis"
+            )
+            plt.title(mfcc_title)
+            plt.ylabel("MFCC 通道")
+            plt.xlabel("时间 (秒)")
+            plt.colorbar(label="MFCC系数值")
+            plot_path = os.path.join(output_dir_mfcc, f"{file_name}_mfcc.png")
+            plt.savefig(plot_path)
+            plt.close()
+            print(f"已保存MFCC图表到: {plot_path}")
+        else:
+            plot_mfcc(time_bins, mfcc, mfcc_title)
+
 
 if __name__ == "__main__":
-    # 指定包含 .wav 文件的目录路径
-    wav_directory = r".\data\audio"  # 请替换为你的目录路径
+    wav_directory = r".\data\raw\train"
 
-    # 增加Mel谱图绘制，新增参数 n_mels, fmin, fmax，可根据需要调整
+    output_dir_mel = r".\data\pre_processed\mel"
+    output_dir_stft = r".\data\pre_processed\stft"
+    output_dir_mfcc = r".\data\pre_processed\mfcc"
+
     batch_stft_processing(
         directory_path=wav_directory,
         duration=5,
@@ -371,5 +350,11 @@ if __name__ == "__main__":
         n_mels=128,
         fmin=0,
         fmax=None,
-        save_plots=False,
+        n_mfcc=13,  # 增加MFCC特征数
+        save_plots_stft=True,
+        save_plots_mel=True,
+        save_plots_mfcc=True,
+        output_dir_stft=output_dir_stft,
+        output_dir_mel=output_dir_mel,
+        output_dir_mfcc=output_dir_mfcc,
     )
