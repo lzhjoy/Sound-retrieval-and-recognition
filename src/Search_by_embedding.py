@@ -14,7 +14,8 @@ def load_mel_from_png(png_path):
     从PNG图像中加载Mel频谱图，并转换为灰度数值矩阵
     """
     img = Image.open(png_path).convert("L")
-    return np.array(img)
+    img_normalized = img / 255.0
+    return np.array(img_normalized)
 
 
 def extract_label(file_name):
@@ -108,8 +109,8 @@ def top_k_and_accuracy(
 
 # 主程序
 if __name__ == "__main__":
-    mel_test_directory = r"./data/pre_processed/mel_test"  # 测试目录
-    mel_pure_directory = r"./data/pre_processed/mel_pure"  # 候选数据库目录
+    mel_test_directory = "./data/pre_processed/mel_test"  # 测试目录
+    mel_pure_directory = "./data/pre_processed/mel_pure"  # 候选数据库目录
 
     model, feature_extractor = load_pretrained_model()
     top_k_and_accuracy(

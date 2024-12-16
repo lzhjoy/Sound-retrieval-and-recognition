@@ -41,8 +41,6 @@ def compute_dtw_distance(matrix1, matrix2):
     return distance
 
 
-
-
 def dtw_top_k_and_accuracy(mel_test_dir, mel_pure_dir, top_k1=10, top_k2=20):
     """
     对mel_test目录下的频谱图与mel_pure进行DTW比较，找出Top10和Top20，并实时计算精度，并记录到文件
@@ -56,7 +54,7 @@ def dtw_top_k_and_accuracy(mel_test_dir, mel_pure_dir, top_k1=10, top_k2=20):
         return
 
     # 定义结果保存路径
-    result_file = "./output/accuracy_results.txt"
+    result_file = r".\output\accuracy_results.txt"
 
     # 打开文件用于写入结果
     with open(result_file, "w", encoding="utf-8") as f:
@@ -99,7 +97,7 @@ def dtw_top_k_and_accuracy(mel_test_dir, mel_pure_dir, top_k1=10, top_k2=20):
             # 精度计算
             top10_labels = [extract_label(item[0]) for item in top10]
             top20_labels = [extract_label(item[0]) for item in top20]
-            
+
             current_top10_hits = top10_labels.count(test_label)  # Top10中标签匹配次数
             current_top20_hits = top20_labels.count(test_label)  # Top20中标签匹配次数
             current_top10_accuracy = current_top10_hits / top_k1  # 当前Top10精度
@@ -109,26 +107,36 @@ def dtw_top_k_and_accuracy(mel_test_dir, mel_pure_dir, top_k1=10, top_k2=20):
 
             # 实时打印Top10和Top20结果
             top10_info = "\nTop 10 结果:\n" + "\n".join(
-                [f"{i+1}. 文件: {file}, 距离: {dist:.2f}" for i, (file, dist) in enumerate(top10)]
+                [
+                    f"{i+1}. 文件: {file}, 距离: {dist:.2f}"
+                    for i, (file, dist) in enumerate(top10)
+                ]
             )
             top20_info = "\nTop 20 结果:\n" + "\n".join(
-                [f"{i+1}. 文件: {file}, 距离: {dist:.2f}" for i, (file, dist) in enumerate(top20)]
+                [
+                    f"{i+1}. 文件: {file}, 距离: {dist:.2f}"
+                    for i, (file, dist) in enumerate(top20)
+                ]
             )
 
             # 实时打印并写入文件
-            progress_info = (f"当前进度: {idx + 1}/{len(test_files)}\n"
-                             f"正在测试文件: {test_file} (标签: {test_label})\n"
-                             f"当前 Top 10 精度: {current_top10_accuracy * 100:.2f}%\n"
-                             f"当前 Top 20 精度: {current_top20_accuracy * 100:.2f}%\n"
-                             f"{top10_info}\n{top20_info}\n")
+            progress_info = (
+                f"当前进度: {idx + 1}/{len(test_files)}\n"
+                f"正在测试文件: {test_file} (标签: {test_label})\n"
+                f"当前 Top 10 精度: {current_top10_accuracy * 100:.2f}%\n"
+                f"当前 Top 20 精度: {current_top20_accuracy * 100:.2f}%\n"
+                f"{top10_info}\n{top20_info}\n"
+            )
             print(progress_info)
             f.write(progress_info)
             f.flush()  # 强制刷新，将缓冲区的数据写入文件
 
         # 最终精度
-        final_accuracy = (f"\n最终精度:\n"
-                          f"Top 10 精度: {top10_correct / (len(test_files) * top_k1) * 100:.2f}%\n"
-                          f"Top 20 精度: {top20_correct / (len(test_files) * top_k2) * 100:.2f}%\n")
+        final_accuracy = (
+            f"\n最终精度:\n"
+            f"Top 10 精度: {top10_correct / (len(test_files) * top_k1) * 100:.2f}%\n"
+            f"Top 20 精度: {top20_correct / (len(test_files) * top_k2) * 100:.2f}%\n"
+        )
         print(final_accuracy)
         f.write(final_accuracy)
 
@@ -137,9 +145,7 @@ def dtw_top_k_and_accuracy(mel_test_dir, mel_pure_dir, top_k1=10, top_k2=20):
 
 # 主程序
 if __name__ == "__main__":
-    mel_test_directory = "./data/pre_processed/mel_test50"  # 测试目录
-    mel_pure_directory = "./data/pre_processed/mel_pure"    # 候选数据库目录
-
+    mel_test_directory = r".\data\pre_processed\mel_test50"  # 测试目录
+    mel_pure_directory = r".\data\pre_processed\mel_pure"  # 候选数据库目录
 
     dtw_top_k_and_accuracy(mel_test_directory, mel_pure_directory, top_k1=10, top_k2=20)
-    # cosine_top_k_and_accuracy(mel_test_directory, mel_pure_directory, top_k1=10, top_k2=20)
