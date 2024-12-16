@@ -5,6 +5,7 @@ import os
 import glob
 from scipy.fftpack import dct
 from tqdm import tqdm
+import librosa
 
 import matplotlib
 
@@ -261,6 +262,66 @@ def mfcc_custom(stft_power, mel_filter, n_mfcc=13):
     mfcc -= np.mean(mfcc, axis=1, keepdims=True)
 
     return mfcc
+
+
+def save_stft_plot(stft_db, sample_rate, hop_length, output_path):
+    """
+    绘制并保存 STFT 频谱图
+    参数:
+        stft_db: STFT 的幅度谱 (dB)
+        sample_rate: 音频采样率
+        hop_length: 窗口步长
+        output_path: 保存路径
+    """
+    plt.figure(figsize=(12, 6))
+    librosa.display.specshow(
+        stft_db, sr=sample_rate, hop_length=hop_length, x_axis="time", y_axis="hz"
+    )
+    plt.colorbar(label="幅度 (dB)")
+    plt.title("STFT 幅度谱")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    plt.savefig(output_path)
+    plt.close()
+
+
+def save_mel_plot(mel_db, sample_rate, hop_length, output_path):
+    """
+    绘制并保存 Mel 频谱图
+    参数:
+        mel_db: Mel 频谱图 (dB)
+        sample_rate: 音频采样率
+        hop_length: 窗口步长
+        output_path: 保存路径
+    """
+    plt.figure(figsize=(12, 6))
+    librosa.display.specshow(
+        mel_db, sr=sample_rate, hop_length=hop_length, x_axis="time", y_axis="mel"
+    )
+    plt.colorbar(label="幅度 (dB)")
+    plt.title("Mel 频谱图")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    plt.savefig(output_path)
+    plt.close()
+
+
+def save_mfcc_plot(mfcc_features, sample_rate, hop_length, output_path):
+    """
+    绘制并保存 MFCC 特征图
+    参数:
+        mfcc_features: MFCC 特征矩阵
+        sample_rate: 音频采样率
+        hop_length: 窗口步长
+        output_path: 保存路径
+    """
+    plt.figure(figsize=(12, 6))
+    librosa.display.specshow(
+        mfcc_features, sr=sample_rate, hop_length=hop_length, x_axis="time"
+    )
+    plt.colorbar(label="MFCC 系数值")
+    plt.title("MFCC 特征图")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    plt.savefig(output_path)
+    plt.close()
 
 
 def batch_stft_processing(

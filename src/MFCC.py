@@ -4,6 +4,7 @@ import os
 import glob
 import librosa
 import librosa.display
+from scipy.fftpack import dct
 from tqdm import tqdm
 
 # 动态配置中文字体
@@ -36,15 +37,142 @@ def normalize_signal(signal):
     return signal / np.max(np.abs(signal))
 
 
+def process_wav_file(file_path, duration=5, sr=None, pre_emphasis_coeff=0.97):
+    """
+    读取和预处理音频文件
+    参数:
+        file_path: 音频文件路径
+        duration: 截取时长（秒）
+        sr: 采样率
+        pre_emphasis_coeff: 预加重系数
+    返回:
+        预处理后的音频信号和采样率
+    """
+    data, sample_rate = librosa.load(file_path, sr=sr, duration=duration)
+    data = normalize_signal(data)
+    data = pre_emphasis(data, alpha=pre_emphasis_coeff)
+    return data, sample_rate
+
+
+def stft_custom(data, n_fft=1024, hop_length=512):
+    """
+    计算 STFT
+    参数:
+        data: 输入音频信号
+        n_fft: FFT 窗口大小
+        hop_length: 窗口步长
+    返回:
+        STFT 幅度谱 (dB)
+    """
+    stft_matrix = librosa.stft(data, n_fft=n_fft, hop_length=hop_length)
+    return librosa.amplitude_to_db(np.abs(stft_matrix), ref=np.max)
+
+
+def mel_custom(stft_matrix, sr, n_fft, n_mels=128, fmin=0, fmax=None):
+    """
+    计算 Mel 频谱图
+    参数:
+        stft_matrix: STFT 幅度谱
+        sr: 采样率
+        n_fft: FFT 窗口大小
+        n_mels: Mel 滤波器数量
+        fmin: 最小频率
+        fmax: 最大频率
+    返回:
+        Mel 频谱图 (dB)
+    """
+    mel_filter = librosa.filters.mel(
+        sr=sr, n_fft=n_fft, n_mels=n_mels, fmin=fmin, fmax=fmax
+    )
+    mel_spectrogram = np.dot(mel_filter, np.abs(stft_matrix) ** 2)
+    return librosa.power_to_db(mel_spectrogram, ref=np.max)
+
+
+def mfcc_custom(mel_spectrogram, n_mfcc=13):
+    """
+    提取 MFCC 特征
+    参数:
+        mel_spectrogram: Mel 频谱图 (功率谱)
+        n_mfcc: MFCC 通道数量
+    返回:
+        MFCC 特征矩阵
+    """
+    mfcc = dct(mel_spectrogram, type=2, axis=0, norm="ortho")[:n_mfcc]
+    mfcc_normalized = (mfcc - np.mean(mfcc, axis=1, keepdims=True)) / (
+        np.std(mfcc, axis=1, keepdims=True) + 1e-10
+    )
+    return mfcc_normalized
+
+
+def save_stft_plot(stft_db, sample_rate, hop_length, output_path):
+    """
+    绘制并保存 STFT 频谱图
+    参数:
+        stft_db: STFT 的幅度谱 (dB)
+        sample_rate: 音频采样率
+        hop_length: 窗口步长
+        output_path: 保存路径
+    """
+    plt.figure(figsize=(12, 6))
+    librosa.display.specshow(
+        stft_db, sr=sample_rate, hop_length=hop_length, x_axis="time", y_axis="hz"
+    )
+    plt.colorbar(label="幅度 (dB)")
+    plt.title("STFT 幅度谱")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    plt.savefig(output_path)
+    plt.close()
+
+
+def save_mel_plot(mel_db, sample_rate, hop_length, output_path):
+    """
+    绘制并保存 Mel 频谱图
+    参数:
+        mel_db: Mel 频谱图 (dB)
+        sample_rate: 音频采样率
+        hop_length: 窗口步长
+        output_path: 保存路径
+    """
+    plt.figure(figsize=(12, 6))
+    librosa.display.specshow(
+        mel_db, sr=sample_rate, hop_length=hop_length, x_axis="time", y_axis="mel"
+    )
+    plt.colorbar(label="幅度 (dB)")
+    plt.title("Mel 频谱图")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    plt.savefig(output_path)
+    plt.close()
+
+
+def save_mfcc_plot(mfcc_features, sample_rate, hop_length, output_path):
+    """
+    绘制并保存 MFCC 特征图
+    参数:
+        mfcc_features: MFCC 特征矩阵
+        sample_rate: 音频采样率
+        hop_length: 窗口步长
+        output_path: 保存路径
+    """
+    plt.figure(figsize=(12, 6))
+    librosa.display.specshow(
+        mfcc_features, sr=sample_rate, hop_length=hop_length, x_axis="time"
+    )
+    plt.colorbar(label="MFCC 系数值")
+    plt.title("MFCC 特征图")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    plt.savefig(output_path)
+    plt.close()
+
+
 def batch_stft_processing(
     directory_path,
-    duration=5,  # 音频截取长度（秒）
-    window_size=1024,  # 窗口大小
-    hop_size=512,  # 步长
-    n_mels=128,  # Mel滤波器数量
-    fmin=0,  # 最小频率
-    fmax=None,  # 最大频率
-    n_mfcc=13,  # MFCC通道数量
+    duration=5,
+    window_size=1024,
+    hop_size=512,
+    n_mels=128,
+    fmin=0,
+    fmax=None,
+    n_mfcc=13,
     save_plots_stft=False,
     save_plots_mel=False,
     save_plots_mfcc=False,
@@ -62,145 +190,87 @@ def batch_stft_processing(
     for file_path in tqdm(wav_files):
         print(f"处理文件: {file_path}")
 
-        # 读取音频文件并截取指定时长
-        try:
-            data, sample_rate = librosa.load(file_path, sr=None, duration=duration)
-        except Exception as e:
-            print(f"无法读取文件 {file_path}，错误: {e}")
-            continue
+        # 预处理音频
+        data, sample_rate = process_wav_file(file_path, duration=duration)
 
-        file_name = os.path.basename(file_path)
+        # 计算 STFT
+        stft_db = stft_custom(data, n_fft=window_size, hop_length=hop_size)
 
-        # === 归一化处理 ===
-        data = normalize_signal(data)
-
-        # === 预加重处理 ===
-        data = pre_emphasis(data)
-
-        # === 1. 计算 STFT ===
-        stft_matrix = librosa.stft(data, n_fft=window_size, hop_length=hop_size)
-        stft_db = librosa.amplitude_to_db(np.abs(stft_matrix), ref=np.max)
-
-        # 绘制STFT幅度谱
-        title = f"STFT 幅度谱 - {file_name}"
+        # 绘制 STFT 图
         if save_plots_stft:
             if output_dir_stft is None:
                 output_dir_stft = os.path.join(directory_path, "stft_plots")
                 os.makedirs(output_dir_stft, exist_ok=True)
             plt.figure(figsize=(12, 6))
             librosa.display.specshow(
-                stft_db, sr=sample_rate, hop_length=hop_size, x_axis="time", y_axis="hz"
+                stft_db,
+                sr=sample_rate,
+                hop_length=hop_size,
+                x_axis="time",
+                y_axis="hz",
             )
-            plt.title(title)
             plt.colorbar(label="幅度 (dB)")
-            plot_path = os.path.join(output_dir_stft, f"{file_name}_stft.png")
-            plt.savefig(plot_path)
+            plt.title("STFT 幅度谱")
+            plt.savefig(
+                os.path.join(output_dir_stft, f"{os.path.basename(file_path)}_stft.png")
+            )
             plt.close()
-            print(f"已保存STFT图表到: {plot_path}")
-        else:
-            plt.figure(figsize=(12, 6))
-            librosa.display.specshow(
-                stft_db, sr=sample_rate, hop_length=hop_size, x_axis="time", y_axis="hz"
-            )
-            plt.title(title)
-            plt.colorbar(label="幅度 (dB)")
-            plt.show()
 
-        # === 2. 生成 Mel 滤波器组 ===
-        if fmax is None:
-            fmax = sample_rate / 2
-
-        mel_filter = librosa.filters.mel(
-            sr=sample_rate, n_fft=window_size, n_mels=n_mels, fmin=fmin, fmax=fmax
-        )
-
-        # 可视化Mel滤波器
-        if visualize_mel_filters:
-            plt.figure(figsize=(12, 6))
-            for i in range(n_mels):
-                plt.plot(np.linspace(0, fmax, mel_filter.shape[1]), mel_filter[i])
-            plt.title("Mel 滤波器组频率响应")
-            plt.xlabel("频率 (Hz)")
-            plt.ylabel("滤波器增益")
-            plt.grid(True)
-            plt.show()
-
-        # === 3. 计算 Mel 频谱图 ===
-        mel_spectrogram = librosa.feature.melspectrogram(
-            y=data,
+        # 计算 Mel 频谱图
+        mel_db = mel_custom(
+            stft_matrix=np.abs(
+                librosa.stft(data, n_fft=window_size, hop_length=hop_size)
+            ),
             sr=sample_rate,
             n_fft=window_size,
-            hop_length=hop_size,
             n_mels=n_mels,
             fmin=fmin,
             fmax=fmax,
         )
-        mel_db = librosa.power_to_db(mel_spectrogram, ref=np.max)
 
-        # 绘制Mel频谱图
-        mel_title = f"Mel 频谱图 - {file_name}"
+        # 绘制 Mel 频谱图
         if save_plots_mel:
             if output_dir_mel is None:
                 output_dir_mel = os.path.join(directory_path, "mel_plots")
                 os.makedirs(output_dir_mel, exist_ok=True)
             plt.figure(figsize=(12, 6))
             librosa.display.specshow(
-                mel_db, sr=sample_rate, hop_length=hop_size, x_axis="time", y_axis="mel"
+                mel_db,
+                sr=sample_rate,
+                hop_length=hop_size,
+                x_axis="time",
+                y_axis="mel",
             )
-            plt.title(mel_title)
             plt.colorbar(label="幅度 (dB)")
-            plot_path = os.path.join(output_dir_mel, f"{file_name}_mel.png")
-            plt.savefig(plot_path)
+            plt.title("Mel 频谱图")
+            plt.savefig(
+                os.path.join(output_dir_mel, f"{os.path.basename(file_path)}_mel.png")
+            )
             plt.close()
-            print(f"已保存Mel图表到: {plot_path}")
-        else:
-            plt.figure(figsize=(12, 6))
-            librosa.display.specshow(
-                mel_db, sr=sample_rate, hop_length=hop_size, x_axis="time", y_axis="mel"
-            )
-            plt.title(mel_title)
-            plt.colorbar(label="幅度 (dB)")
-            plt.show()
 
-        # === 4. 计算 MFCC 特征 ===
-        mfcc = librosa.feature.mfcc(S=mel_spectrogram, sr=sample_rate, n_mfcc=n_mfcc)
+        # 计算 MFCC
+        mfcc_features = mfcc_custom(mel_db, n_mfcc=n_mfcc)
 
-        # 均值归一化
-        mfcc_normalized = (mfcc - np.mean(mfcc, axis=1, keepdims=True)) / (
-            np.std(mfcc, axis=1, keepdims=True) + 1e-10
-        )
-
-        # 绘制MFCC特征图
-        mfcc_title = f"MFCC 特征图 - {file_name}"
+        # 绘制 MFCC 特征图
         if save_plots_mfcc:
             if output_dir_mfcc is None:
                 output_dir_mfcc = os.path.join(directory_path, "mfcc_plots")
                 os.makedirs(output_dir_mfcc, exist_ok=True)
             plt.figure(figsize=(12, 6))
             librosa.display.specshow(
-                mfcc_normalized, sr=sample_rate, hop_length=hop_size, x_axis="time"
+                mfcc_features, sr=sample_rate, hop_length=hop_size, x_axis="time"
             )
-            plt.title(mfcc_title)
-            plt.colorbar(label="MFCC系数值")
-            plot_path = os.path.join(output_dir_mfcc, f"{file_name}_mfcc.png")
-            plt.savefig(plot_path)
+            plt.colorbar(label="MFCC 系数值")
+            plt.title("MFCC 特征图")
+            plt.savefig(
+                os.path.join(output_dir_mfcc, f"{os.path.basename(file_path)}_mfcc.png")
+            )
             plt.close()
-            print(f"已保存MFCC图表到: {plot_path}")
-        else:
-            plt.figure(figsize=(12, 6))
-            librosa.display.specshow(
-                mfcc_normalized, sr=sample_rate, hop_length=hop_size, x_axis="time"
-            )
-            plt.title(mfcc_title)
-            plt.colorbar(label="MFCC系数值")
-            plt.show()
 
 
 if __name__ == "__main__":
-    wav_directory = r"./data/raw/train"
-
     batch_stft_processing(
-        directory_path=wav_directory,
+        directory_path="./data/raw/train",
         duration=5,
         window_size=1024,
         hop_size=512,
@@ -211,8 +281,7 @@ if __name__ == "__main__":
         save_plots_stft=True,
         save_plots_mel=True,
         save_plots_mfcc=True,
-        output_dir_mel=r".\data\pre_processed\mel",
-        output_dir_stft=r".\data\pre_processed\stft",
-        output_dir_mfcc=r".\data\pre_processed\mfcc",
-        visualize_mel_filters=False,
+        output_dir_stft="./data/pre_processed/stft",
+        output_dir_mel="./data/pre_processed/mel",
+        output_dir_mfcc="./data/pre_processed/mfcc",
     )
