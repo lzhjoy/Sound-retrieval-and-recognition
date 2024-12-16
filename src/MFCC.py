@@ -8,6 +8,7 @@ import librosa.display  # 用于后续可视化(可选)
 
 # 动态配置字体
 import matplotlib
+
 matplotlib.rcParams["font.family"] = "SimHei"  # 或其他中文字体
 matplotlib.rcParams["axes.unicode_minus"] = False
 
@@ -87,7 +88,9 @@ def plot_fft(freq, magnitude, title):
     plt.show()
 
 
-def plot_stft(time_bins, freq_bins, magnitude_db, title, cmap="plasma", vmin=-100, vmax=0):
+def plot_stft(
+    time_bins, freq_bins, magnitude_db, title, cmap="plasma", vmin=-100, vmax=0
+):
     """
     绘制 STFT 频谱图（时频图），幅度为 dB 尺度
     """
@@ -109,14 +112,18 @@ def plot_stft(time_bins, freq_bins, magnitude_db, title, cmap="plasma", vmin=-10
     plt.show()
 
 
-def plot_mel_spectrogram(time_bins, mel_freqs, mel_db, title, cmap='magma', vmin=-100, vmax=0):
+def plot_mel_spectrogram(
+    time_bins, mel_freqs, mel_db, title, cmap="magma", vmin=-100, vmax=0
+):
     """
     绘制 Mel 频谱图（时频图），幅度为 dB 尺度
     mel_freqs: Mel 滤波器组数目对应的 Mel 频率轴（这里直接使用滤波器组个数作为频率轴刻度）
     """
     plt.figure(figsize=(12, 6))
     # mel_db shape: (n_mels, time_frames)
-    plt.pcolormesh(time_bins, mel_freqs, mel_db, shading='gouraud', cmap=cmap, vmin=vmin, vmax=vmax)
+    plt.pcolormesh(
+        time_bins, mel_freqs, mel_db, shading="gouraud", cmap=cmap, vmin=vmin, vmax=vmax
+    )
     plt.title(title)
     plt.ylabel("Mel 频率通道")
     plt.xlabel("时间 (秒)")
@@ -191,7 +198,7 @@ def stft_custom(x, sample_rate, window_size=1024, hop_size=512):
         frame = x[start:end]
         if len(frame) < window_size:
             # 数据长度不够，用0填充
-            frame = np.pad(frame, (0, window_size - len(frame)), 'constant')
+            frame = np.pad(frame, (0, window_size - len(frame)), "constant")
         frame_win = frame * window
         # 填充为 2 的幂长度
         frame_padded = pad_to_power_of_two(frame_win)
@@ -243,7 +250,9 @@ def batch_stft_processing(
 
         N = int(sample_rate * duration)
         if N > len(data):
-            print(f"文件 {file_path} 长度不足 {duration} 秒，实际长度: {len(data)/sample_rate:.2f} 秒")
+            print(
+                f"文件 {file_path} 长度不足 {duration} 秒，实际长度: {len(data)/sample_rate:.2f} 秒"
+            )
             N = len(data)
         data = data[:N]
 
@@ -253,7 +262,9 @@ def batch_stft_processing(
         data = data / np.max(np.abs(data))
 
         # 计算STFT的线性幅度谱
-        time_bins, freq_bins, stft_matrix_lin = stft_custom(data, sample_rate, window_size, hop_size)
+        time_bins, freq_bins, stft_matrix_lin = stft_custom(
+            data, sample_rate, window_size, hop_size
+        )
 
         # 转换为分贝尺度的 STFT
         stft_matrix_db = 20 * np.log10(stft_matrix_lin + 1e-10)
@@ -291,7 +302,9 @@ def batch_stft_processing(
             fmax = sample_rate / 2
 
         # 生成 Mel 滤波器组
-        mel_filter = librosa.filters.mel(sr=sample_rate, n_fft=window_size, n_mels=n_mels, fmin=fmin, fmax=fmax)
+        mel_filter = librosa.filters.mel(
+            sr=sample_rate, n_fft=window_size, n_mels=n_mels, fmin=fmin, fmax=fmax
+        )
 
         # stft_matrix_lin: shape (freq_bins, time_frames)
         # mel_filter: shape (n_mels, freq_bins)
@@ -315,10 +328,10 @@ def batch_stft_processing(
                 time_bins,
                 mel_freqs,
                 mel_spectrogram_db,
-                shading='gouraud',
-                cmap='magma',
+                shading="gouraud",
+                cmap="magma",
                 vmin=-100,
-                vmax=0
+                vmax=0,
             )
             plt.title(mel_title)
             plt.ylabel("Mel 通道")
